@@ -222,3 +222,6 @@ $RECYCLE.BIN/
 
 ### Maven ###
 target/
+
+### Pascalito codegen output ###
+out/

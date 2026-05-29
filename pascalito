@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Wrapper para o compilador Pascalito.
+# Builda o jar sob demanda em target/pascalito.jar e o executa.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+JAR="$SCRIPT_DIR/target/pascalito.jar"
+
+if [[ ! -f "$JAR" ]]; then
+    echo "[pascalito] jar não encontrado, executando 'mvn -q package -DskipTests'..." >&2
+    (cd "$SCRIPT_DIR" && mvn -q package -DskipTests)
+fi
+
+exec java -jar "$JAR" "$@"

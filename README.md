@@ -38,7 +38,7 @@ java -jar target/pascalito.jar <flag> <arquivo.pas>
 | *(padrão)*  | Léxico + sintático + semântico. Falha com mensagem `linha, coluna` em qualquer erro. |
 | `--lex`     | Só léxico. Imprime tabela `LINHA / TIPO / ATRIBUTO`.                       |
 | `--parse`   | Léxico + sintático. Imprime "Análise sintática concluída".                 |
-| `--tree`    | Combina com `--parse` ou padrão; imprime a árvore sintática.               |
+| `--tree`    | Combina com `--parse` ou padrão; gera a árvore sintática como imagem `out/<basename>.tree.png`. |
 | `--emit`    | Léxico + sintático + semântico + geração. Grava `out/<basename>.asm`.      |
 | `--run`     | Idem `--emit`, mas executa o assembly na VM interna.                       |
 | `--help`    | Mostra esta mensagem.                                                      |
@@ -66,7 +66,14 @@ java -jar target/pascalito.jar <flag> <arquivo.pas>
 
 ```sh
 ./pascalito --parse --tree examples/10_sintatico_ok.pas
+# Análise sintática concluída com sucesso.
+# Árvore sintática gravada em out/10_sintatico_ok.tree.png
 ```
+
+O `--tree` desenha a árvore de derivação como imagem PNG (sem dependências
+externas — usa apenas AWT/`ImageIO` do JDK). Caixas **azuis** são regras
+(não-terminais) e caixas **amarelas** são terminais (tokens). Funciona junto
+com `--parse` ou no modo padrão (após o semântico).
 
 ### 3. Semântico — checagem de tipos
 

@@ -13,6 +13,7 @@ import com.pascalito.semantic.SemanticAnalyzer;
 import com.pascalito.semantic.SemanticError;
 import com.pascalito.syntax.SyntaxError;
 import com.pascalito.syntax.SyntaxErrorListener;
+import com.pascalito.syntax.TreeImageRenderer;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -119,9 +120,7 @@ public final class Main {
         }
         System.out.println("Análise sintática concluída com sucesso.");
         if (showTree) {
-            System.out.println();
-            System.out.println("Árvore sintática:");
-            System.out.println(outcome.tree.toStringTree(outcome.parser));
+            writeTreeImage(source, outcome.tree, outcome.parser);
         }
         return EXIT_OK;
     }
@@ -135,11 +134,23 @@ public final class Main {
         System.out.println("Análise semântica concluída com sucesso.");
         System.out.println("Símbolos declarados: " + outcome.analyzer.getSymbolTable().size());
         if (showTree) {
-            System.out.println();
-            System.out.println("Árvore sintática:");
-            System.out.println(outcome.tree.toStringTree(outcome.parser));
+            writeTreeImage(source, outcome.tree, outcome.parser);
         }
         return EXIT_OK;
+    }
+
+    private static void writeTreeImage(Path source, ParseTree tree, PascalitoParser parser) {
+        try {
+            Path outDir = Path.of("out");
+            Files.createDirectories(outDir);
+            Path outFile = outDir.resolve(
+                    stripExtension(source.getFileName().toString()) + ".tree.png");
+            TreeImageRenderer.render(tree, parser.getRuleNames(), outFile);
+            System.out.println();
+            System.out.println("Árvore sintática gravada em " + outFile);
+        } catch (IOException e) {
+            System.err.println("Não foi possível gerar a imagem da árvore: " + e.getMessage());
+        }
     }
 
     static int runEmit(Path source) throws IOException {

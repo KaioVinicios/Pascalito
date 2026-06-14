@@ -4,6 +4,7 @@ import com.pascalito.codegen.CodeGenerator;
 import com.pascalito.codegen.Instruction;
 import com.pascalito.codegen.Optimizer;
 import com.pascalito.codegen.VirtualMachine;
+import com.pascalito.codegen.X86Generator;
 import com.pascalito.lex.LexicalErrorListener;
 import com.pascalito.lex.LexicalException;
 import com.pascalito.lex.TokenInfo;
@@ -49,6 +50,7 @@ public final class Main {
         boolean parseOnly = false;
         boolean emit = false;
         boolean run = false;
+        boolean asm = false;
         boolean showTree = false;
         boolean opt = false;
         Path source = null;
@@ -59,6 +61,7 @@ public final class Main {
                 case "--parse" -> parseOnly = true;
                 case "--emit"  -> emit = true;
                 case "--run"   -> run = true;
+                case "--asm"   -> asm = true;
                 case "--opt"   -> opt = true;
                 case "--tree"  -> showTree = true;
                 case "-h", "--help" -> { usage(); System.exit(EXIT_OK); }
@@ -84,6 +87,8 @@ public final class Main {
                 code = runLex(source);
             } else if (parseOnly) {
                 code = runParse(source, showTree);
+            } else if (asm) {
+                code = runAsm(source);
             } else if (emit) {
                 code = runEmit(source, opt);
             } else if (run) {
@@ -189,6 +194,25 @@ public final class Main {
         return EXIT_OK;
     }
 
+    /** Gera assembly x86 a partir do 3AC otimizado e grava em out/&lt;programa&gt;.asm. */
+    static int runAsm(Path source) throws IOException {
+        SemanticOutcome outcome = analyzeFile(source);
+        if (outcome.exitCode != EXIT_OK) {
+            return outcome.exitCode;
+        }
+        CodeGenerator gen = new CodeGenerator();
+        gen.visit(outcome.tree);
+        List<Instruction> code = Optimizer.optimize(gen.getCode());
+        String x86 = X86Generator.generate(code);
+
+        Path outDir = Path.of("out");
+        Files.createDirectories(outDir);
+        Path outFile = outDir.resolve(stripExtension(source.getFileName().toString()) + ".asm");
+        Files.writeString(outFile, x86);
+        System.out.println("Assembly x86 escrito em " + outFile);
+        return EXIT_OK;
+    }
+
     private static String stripExtension(String filename) {
         int dot = filename.lastIndexOf('.');
         return dot < 0 ? filename : filename.substring(0, dot);
@@ -275,12 +299,13 @@ public final class Main {
 
     private static void usage() {
         System.err.println("""
-                Uso: pascalito [--lex|--parse|--emit|--run] [--opt] [--tree] <arquivo.pas>
+                Uso: pascalito [--lex|--parse|--emit|--run|--asm] [--opt] [--tree] <arquivo.pas>
 
                   --lex    executa apenas o analisador léxico
                   --parse  executa léxico + sintático (pula a análise semântica)
-                  --emit   compila e imprime o código assembly didático
-                  --run    compila e executa o programa (gera assembly + VM)
+                  --emit   compila e imprime o código intermediário 3AC didático
+                  --run    compila e executa o programa (gera 3AC + VM)
+                  --asm    gera assembly Intel x86 do 3AC otimizado em out/<programa>.asm
                   --opt    otimiza a IR 3AC (constant folding + dead code) antes de --emit/--run
                   --tree   imprime a árvore sintática
                   --help   mostra esta mensagem

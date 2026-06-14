@@ -92,6 +92,96 @@ class SemanticAnalyzerTest {
         assertTrue(errs.stream().anyMatch(e -> e.message().contains("já declarado")));
     }
 
+    @Test
+    void assignsSequentialOffsetsByType() {
+        SemanticAnalyzer a = analyze("""
+                program p;
+                var a: integer; b: boolean; c: integer;
+                begin a := 0 end.
+                """);
+        assertFalse(a.hasErrors());
+        assertEquals(0, a.getSymbolTable().lookup("a").offset()); // integer @ 0
+        assertEquals(2, a.getSymbolTable().lookup("b").offset()); // boolean @ 2
+        assertEquals(3, a.getSymbolTable().lookup("c").offset()); // integer @ 3
+    }
+
+    @Test
+    void nestedBlocksResolveOuterScopeNames() {
+        // blocos BEGIN/END aninhados abrem escopos filhos; o nome 'n' do escopo
+        // do programa deve ser resolvido subindo a cadeia de escopos.
+        assertNoErrors("""
+                program p; var n: integer;
+                begin
+                  begin n := 1 end;
+                  begin begin n := n + 1 end end
+                end.
+                """);
+    }
+
+    @Test
+    void symbolTableExposedIsTheGlobalScope() {
+        SemanticAnalyzer a = analyze("""
+                program p; var n: integer;
+                begin begin n := 1 end end.
+                """);
+        // após visitar, o escopo exposto é o global (raiz, sem pai) com as declarações
+        assertNull(a.getSymbolTable().parent());
+        assertEquals(1, a.getSymbolTable().size());
+        assertNotNull(a.getSymbolTable().lookup("n"));
+    }
+
+    // ===== Overflow de constante inteira (CTE) — erro semântico V2 =====
+
+    @Test
+    void positiveCteOverflowIsSemanticError() {
+        List<SemanticError> errs = errorsOf("""
+                program p; var n: integer; begin n := 40000 end.
+                """);
+        assertTrue(errs.stream().anyMatch(e -> e.message().contains("Overflow de Constante")));
+    }
+
+    @Test
+    void cteAtUpperBoundIsAccepted() {
+        assertNoErrors("program p; var n: integer; begin n := 32767 end.");
+    }
+
+    @Test
+    void cteJustAboveUpperBoundIsError() {
+        List<SemanticError> errs = errorsOf("program p; var n: integer; begin n := 32768 end.");
+        assertTrue(errs.stream().anyMatch(e -> e.message().contains("Overflow de Constante")));
+    }
+
+    @Test
+    void negativeCteAtLowerBoundIsAccepted() {
+        // -32768 é válido pela faixa COM sinal, embora a magnitude 32768 sozinha estoure
+        assertNoErrors("program p; var n: integer; begin n := -32768 end.");
+    }
+
+    @Test
+    void negativeCteBelowLowerBoundIsError() {
+        List<SemanticError> errs = errorsOf("program p; var n: integer; begin n := -32769 end.");
+        assertTrue(errs.stream().anyMatch(e -> e.message().contains("Overflow de Constante")));
+    }
+
+    // ===== Truncamento de identificador longo — aviso (não erro) =====
+
+    @Test
+    void longIdentifierEmitsWarningNotError() {
+        SemanticAnalyzer a = analyze("""
+                program p; var identificadorMuitoGrande: integer;
+                begin identificadorMui := 1 end.
+                """);
+        assertFalse(a.hasErrors(), () -> "truncamento é aviso, não erro: " + a.getErrors());
+        assertTrue(a.getWarnings().stream().anyMatch(w -> w.contains("identificadorMuitoGrande")),
+                () -> "esperava aviso de truncamento, avisos: " + a.getWarnings());
+    }
+
+    @Test
+    void shortIdentifierEmitsNoWarning() {
+        SemanticAnalyzer a = analyze("program p; var n: integer; begin n := 1 end.");
+        assertTrue(a.getWarnings().isEmpty());
+    }
+
     // ===== Uso de variável não declarada =====
 
     @Test

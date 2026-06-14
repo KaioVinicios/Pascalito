@@ -3,6 +3,7 @@ package com.pascalito.semantic;
 import com.pascalito.parser.PascalitoParser;
 import com.pascalito.parser.PascalitoParser.AtomContext;
 import com.pascalito.parser.PascalitoParser.CmdAtribContext;
+import com.pascalito.parser.PascalitoParser.CmdCompContext;
 import com.pascalito.parser.PascalitoParser.CmdIfContext;
 import com.pascalito.parser.PascalitoParser.CmdReadContext;
 import com.pascalito.parser.PascalitoParser.CmdWhileContext;
@@ -24,15 +25,28 @@ import java.util.List;
 
 public class SemanticAnalyzer extends PascalitoParserBaseVisitor<Type> {
 
-    private final SymbolTable symbols = new SymbolTable();
+    /** Escopo global (raiz da cadeia); contém as declarações de nível de programa. */
+    private final SymbolTable globalScope = new SymbolTable();
+    /** Escopo corrente; avança para filhos a cada BEGIN/END. */
+    private SymbolTable symbols = globalScope;
     private final List<SemanticError> errors = new ArrayList<>();
+    private final List<String> warnings = new ArrayList<>();
+
+    /** Faixa de valores de uma CTE (inteiro de 2 bytes COM sinal). */
+    private static final int CTE_MIN = -32768;
+    private static final int CTE_MAX = 32767;
 
     public List<SemanticError> getErrors() {
         return Collections.unmodifiableList(errors);
     }
 
+    /** Avisos não-fatais (ex.: truncamento de identificador longo) emitidos pela análise. */
+    public List<String> getWarnings() {
+        return Collections.unmodifiableList(warnings);
+    }
+
     public SymbolTable getSymbolTable() {
-        return symbols;
+        return globalScope;
     }
 
     public boolean hasErrors() {
@@ -45,11 +59,13 @@ public class SemanticAnalyzer extends PascalitoParserBaseVisitor<Type> {
     public Type visitDeclTip(DeclTipContext ctx) {
         Type declared = typeOf(ctx.tip());
         for (TerminalNode idNode : ctx.listId().ID()) {
-            String name = SymbolTable.normalize(idNode.getText());
+            String raw = idNode.getText();
+            String name = SymbolTable.normalize(raw);
             Token tok = idNode.getSymbol();
             int line = tok.getLine();
             int col = tok.getCharPositionInLine() + 1;
-            Symbol existing = symbols.lookup(name);
+            warnIfTruncated(raw, name, line, col);
+            Symbol existing = symbols.lookupLocal(name);
             if (existing != null) {
                 error(line, col,
                         "Identificador '%s' já declarado na linha %d"
@@ -69,6 +85,21 @@ public class SemanticAnalyzer extends PascalitoParserBaseVisitor<Type> {
     }
 
     // ===== Comandos =====
+
+    /**
+     * Cada bloco {@code BEGIN}/{@code END} abre um escopo filho encadeado ao escopo
+     * corrente e o fecha ao final, restaurando o escopo pai. Declarações locais (caso
+     * a linguagem venha a permiti-las) ficam confinadas ao bloco e podem sombrear o pai.
+     */
+    @Override
+    public Type visitCmdComp(CmdCompContext ctx) {
+        symbols = new SymbolTable(symbols);
+        try {
+            return visitChildren(ctx);
+        } finally {
+            symbols = symbols.parent();
+        }
+    }
 
     @Override
     public Type visitCmdAtrib(CmdAtribContext ctx) {
@@ -242,7 +273,7 @@ public class SemanticAnalyzer extends PascalitoParserBaseVisitor<Type> {
             }
             return sym.type();
         }
-        if (ctx.CTE() != null)   return Type.INTEGER;
+        if (ctx.CTE() != null)   { checkCteRange(ctx); return Type.INTEGER; }
         if (ctx.TRUE() != null)  return Type.BOOLEAN;
         if (ctx.FALSE() != null) return Type.BOOLEAN;
         if (ctx.expr() != null)  return visit(ctx.expr());
@@ -288,6 +319,44 @@ public class SemanticAnalyzer extends PascalitoParserBaseVisitor<Type> {
             return Type.ERROR;
         }
         return Type.BOOLEAN;
+    }
+
+    /**
+     * Valida a faixa de uma constante inteira (2 bytes com sinal). A magnitude vem do
+     * token {@code CTE} (sempre sem sinal na gramática); o sinal vem de um {@code MENOS}
+     * unário aplicado diretamente à constante, permitindo o limite inferior {@code -32768}.
+     */
+    private void checkCteRange(AtomContext ctx) {
+        Token tok = ctx.CTE().getSymbol();
+        boolean negated = isDirectlyNegated(ctx);
+        long magnitude;
+        try {
+            magnitude = Long.parseLong(tok.getText());
+        } catch (NumberFormatException e) {
+            magnitude = Long.MAX_VALUE; // grande demais até para long → estoura de qualquer forma
+        }
+        long signed = negated ? -magnitude : magnitude;
+        if (signed < CTE_MIN || signed > CTE_MAX) {
+            error(tok.getLine(), tok.getCharPositionInLine() + 1,
+                    "Overflow de Constante: %s%s fora do intervalo [%d, %d]"
+                            .formatted(negated ? "-" : "", tok.getText(), CTE_MIN, CTE_MAX));
+        }
+    }
+
+    /** Verifica se o {@code atom} está sob um {@code MENOS} unário aplicado diretamente. */
+    private boolean isDirectlyNegated(AtomContext ctx) {
+        return ctx.getParent() instanceof ExprUnaryContext inner
+                && inner.getParent() instanceof ExprUnaryContext outer
+                && outer.MENOS() != null
+                && outer.exprUnary() == inner;
+    }
+
+    private void warnIfTruncated(String raw, String truncated, int line, int col) {
+        if (raw.length() > SymbolTable.ID_MAX_LENGTH) {
+            warnings.add(
+                    "Aviso (linha %d, coluna %d): identificador '%s' truncado para '%s' (máx. %d caracteres)"
+                            .formatted(line, col, raw, truncated, SymbolTable.ID_MAX_LENGTH));
+        }
     }
 
     private void error(int line, int column, String message) {

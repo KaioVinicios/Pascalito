@@ -132,7 +132,12 @@ public final class Main {
         }
 
         System.out.println("Análise semântica concluída com sucesso.");
-        System.out.println("Símbolos declarados: " + outcome.analyzer.getSymbolTable().size());
+        var table = outcome.analyzer.getSymbolTable();
+        System.out.println("Símbolos declarados: " + table.size());
+        for (var sym : table.all()) {
+            System.out.printf("  %-16s %-8s offset=%d (%d byte(s))%n",
+                    sym.name(), sym.type().displayName(), sym.offset(), sym.type().sizeInBytes());
+        }
         if (showTree) {
             writeTreeImage(source, outcome.tree, outcome.parser);
         }
@@ -238,6 +243,9 @@ public final class Main {
         }
         SemanticAnalyzer analyzer = new SemanticAnalyzer();
         analyzer.visit(parse.tree);
+        for (String warning : analyzer.getWarnings()) {
+            System.err.println("  [aviso] " + warning);
+        }
         if (analyzer.hasErrors()) {
             System.err.println("Erros semânticos encontrados:");
             for (SemanticError err : analyzer.getErrors()) {

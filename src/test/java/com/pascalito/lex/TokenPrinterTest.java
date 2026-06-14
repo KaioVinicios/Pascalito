@@ -103,11 +103,13 @@ class TokenPrinterTest {
     }
 
     @Test
-    void cteAboveLimitThrowsLexicalException() {
-        LexicalException ex = assertThrows(LexicalException.class, () -> tokenize("32768"));
-        assertEquals(1, ex.getLine());
-        assertEquals(1, ex.getColumn());
-        assertTrue(ex.getMessage().contains("2 bytes"));
+    void cteAboveLimitIsLexicallyAccepted() {
+        // V2: o limite de 2 bytes deixou de ser léxico — o overflow vira erro semântico.
+        // O léxico apenas reconhece a sequência de dígitos como CTE.
+        List<TokenInfo> infos = tokenize("40000");
+        assertEquals(1, infos.size());
+        assertEquals("CTE", infos.get(0).tipo());
+        assertEquals("40000", infos.get(0).atributo());
     }
 
     @Test

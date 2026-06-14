@@ -12,7 +12,6 @@ import java.util.Map;
 public class TokenPrinter {
 
     public static final int ID_MAX_LENGTH = 16;
-    public static final int CTE_MAX_VALUE = 32767;
 
     private static final Map<Integer, String[]> EXPLICIT_CATEGORY = new HashMap<>();
 
@@ -64,22 +63,9 @@ public class TokenPrinter {
                 return new TokenInfo("ID", truncated, line, column);
             }
             case PascalitoLexer.CTE -> {
-                String text = token.getText();
-                int value;
-                try {
-                    value = Integer.parseInt(text);
-                } catch (NumberFormatException e) {
-                    throw new LexicalException(
-                            "Constante inteira inválida: '" + text + "'",
-                            line, column);
-                }
-                if (value > CTE_MAX_VALUE) {
-                    throw new LexicalException(
-                            "Constante inteira excede o limite de 2 bytes (0..%d): %d"
-                                    .formatted(CTE_MAX_VALUE, value),
-                            line, column);
-                }
-                return new TokenInfo("CTE", String.valueOf(value), line, column);
+                // V2: o léxico apenas reconhece a sequência de dígitos. A validação do
+                // limite de 2 bytes (overflow) é responsabilidade do analisador semântico.
+                return new TokenInfo("CTE", token.getText(), line, column);
             }
             case PascalitoLexer.CADEIA -> {
                 String text = token.getText();

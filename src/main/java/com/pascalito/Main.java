@@ -2,6 +2,7 @@ package com.pascalito;
 
 import com.pascalito.codegen.CodeGenerator;
 import com.pascalito.codegen.Instruction;
+import com.pascalito.codegen.Optimizer;
 import com.pascalito.codegen.VirtualMachine;
 import com.pascalito.lex.LexicalErrorListener;
 import com.pascalito.lex.LexicalException;
@@ -49,6 +50,7 @@ public final class Main {
         boolean emit = false;
         boolean run = false;
         boolean showTree = false;
+        boolean opt = false;
         Path source = null;
 
         for (String arg : args) {
@@ -57,6 +59,7 @@ public final class Main {
                 case "--parse" -> parseOnly = true;
                 case "--emit"  -> emit = true;
                 case "--run"   -> run = true;
+                case "--opt"   -> opt = true;
                 case "--tree"  -> showTree = true;
                 case "-h", "--help" -> { usage(); System.exit(EXIT_OK); }
                 default -> {
@@ -82,9 +85,9 @@ public final class Main {
             } else if (parseOnly) {
                 code = runParse(source, showTree);
             } else if (emit) {
-                code = runEmit(source);
+                code = runEmit(source, opt);
             } else if (run) {
-                code = runProgram(source);
+                code = runProgram(source, opt);
             } else {
                 code = runSemantic(source, showTree);
             }
@@ -158,13 +161,19 @@ public final class Main {
         }
     }
 
-    static int runEmit(Path source) throws IOException {
+    static int runEmit(Path source, boolean opt) throws IOException {
         SemanticOutcome outcome = analyzeFile(source);
         if (outcome.exitCode != EXIT_OK) {
             return outcome.exitCode;
         }
         CodeGenerator gen = new CodeGenerator();
         gen.visit(outcome.tree);
+        List<Instruction> code = gen.getCode();
+        if (opt) {
+            int before = code.size();
+            code = Optimizer.optimize(code);
+            System.out.println("Otimização: %d → %d instruções".formatted(before, code.size()));
+        }
 
         Path outDir = Path.of("out");
         Files.createDirectories(outDir);
@@ -172,7 +181,7 @@ public final class Main {
 
         StringBuilder sb = new StringBuilder();
         sb.append("=== CODIGO ASSEMBLY GERADO ===\n");
-        for (Instruction ins : gen.getCode()) {
+        for (Instruction ins : code) {
             sb.append(ins).append('\n');
         }
         Files.writeString(outFile, sb.toString());
@@ -185,15 +194,16 @@ public final class Main {
         return dot < 0 ? filename : filename.substring(0, dot);
     }
 
-    static int runProgram(Path source) throws IOException {
+    static int runProgram(Path source, boolean opt) throws IOException {
         SemanticOutcome outcome = analyzeFile(source);
         if (outcome.exitCode != EXIT_OK) {
             return outcome.exitCode;
         }
         CodeGenerator gen = new CodeGenerator();
         gen.visit(outcome.tree);
+        List<Instruction> code = opt ? Optimizer.optimize(gen.getCode()) : gen.getCode();
         PrintWriter out = new PrintWriter(new OutputStreamWriter(System.out), true);
-        VirtualMachine vm = new VirtualMachine(gen.getCode(), new InputStreamReader(System.in), out);
+        VirtualMachine vm = new VirtualMachine(code, new InputStreamReader(System.in), out);
         try {
             vm.run();
         } catch (VirtualMachine.VmException e) {
@@ -265,12 +275,13 @@ public final class Main {
 
     private static void usage() {
         System.err.println("""
-                Uso: pascalito [--lex|--parse|--emit|--run] [--tree] <arquivo.pas>
+                Uso: pascalito [--lex|--parse|--emit|--run] [--opt] [--tree] <arquivo.pas>
 
                   --lex    executa apenas o analisador léxico
                   --parse  executa léxico + sintático (pula a análise semântica)
                   --emit   compila e imprime o código assembly didático
                   --run    compila e executa o programa (gera assembly + VM)
+                  --opt    otimiza a IR 3AC (constant folding + dead code) antes de --emit/--run
                   --tree   imprime a árvore sintática
                   --help   mostra esta mensagem
 

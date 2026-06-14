@@ -107,7 +107,9 @@ public class VirtualMachine {
             if ("false".equals(lit)) return Boolean.FALSE;
             return Integer.parseInt(lit);
         }
-        if (src.startsWith("t") && src.length() > 1 && Character.isDigit(src.charAt(1))) {
+        // Temporárias virtuais da IR 3AC têm o prefixo "t_"; identificadores de
+        // variável nunca contêm '_' (gramática ID: [a-zA-Z][a-zA-Z0-9]*).
+        if (src.startsWith("t_")) {
             return temps.get(src);
         }
         return vars.get(src);

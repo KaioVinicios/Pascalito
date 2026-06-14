@@ -34,6 +34,45 @@ class CodeGeneratorTest {
         return code.stream().map(Instruction::op).toList();
     }
 
+    // ===== Formato da IR 3AC (V2) =====
+
+    @Test
+    void temporariesUseUnderscoreNaming() {
+        List<Instruction> code = codeOf("program p; var n: integer; begin n := 1 + 2 end.");
+        assertTrue(code.stream().flatMap(i -> i.args().stream()).anyMatch(a -> a.matches("t_\\d+")),
+                "temporárias devem usar o formato t_<n>");
+        assertFalse(code.stream().flatMap(i -> i.args().stream()).anyMatch(a -> a.matches("t\\d+")),
+                "não deve restar o formato antigo t<n> sem underscore");
+    }
+
+    @Test
+    void labelsUseSequentialNaming() {
+        List<Instruction> code = codeOf("""
+                program p; var n: integer;
+                begin if n > 0 then n := 1 else n := 2 end.
+                """);
+        List<String> labels = code.stream().filter(Instruction::isLabel)
+                .map(i -> i.args().get(0)).toList();
+        assertFalse(labels.isEmpty());
+        assertTrue(labels.stream().allMatch(l -> l.matches("L_\\d+")),
+                () -> "rótulos devem ser L_<n>: " + labels);
+    }
+
+    @Test
+    void everyInstructionHasAtMostThreeOperands() {
+        List<Instruction> code = codeOf("""
+                program p; var a, b, c: integer; bo: boolean;
+                begin
+                  a := (b + c) * 2;
+                  if a > b then bo := a == c else bo := a <> b;
+                  while a < 100 do a := a + b * c
+                end.
+                """);
+        assertTrue(code.stream().allMatch(i -> i.args().size() <= 3),
+                () -> "invariante 3AC (≤ 3 operandos) violada: "
+                        + code.stream().filter(i -> i.args().size() > 3).toList());
+    }
+
     @Test
     void emitsVarDeclarationsForEachIdentifier() {
         List<Instruction> code = codeOf("""

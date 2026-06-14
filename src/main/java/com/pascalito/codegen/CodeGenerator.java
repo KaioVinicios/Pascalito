@@ -36,12 +36,13 @@ public class CodeGenerator extends PascalitoParserBaseVisitor<String> {
         return Collections.unmodifiableList(code);
     }
 
+    // IR 3AC (spec V2): temporárias virtuais t_0, t_1, … e rótulos de desvio L_1, L_2, …
     private String novoTemp() {
-        return "t" + (tempCounter++);
+        return "t_" + (tempCounter++);
     }
 
-    private String novoLabel(String prefix) {
-        return "L_" + prefix + "_" + (labelCounter++);
+    private String novoLabel() {
+        return "L_" + (++labelCounter);
     }
 
     private void emit(String op, String... args) {
@@ -99,8 +100,8 @@ public class CodeGenerator extends PascalitoParserBaseVisitor<String> {
     public String visitCmdIf(CmdIfContext ctx) {
         String tCond = visit(ctx.expr());
         boolean hasElse = ctx.ELSE() != null;
-        String lElse = novoLabel("else");
-        String lEnd  = novoLabel("endif");
+        String lElse = novoLabel();
+        String lEnd  = novoLabel();
         emit("JUMPF", tCond, hasElse ? lElse : lEnd);
         visit(ctx.cmd(0));
         if (hasElse) {
@@ -114,8 +115,8 @@ public class CodeGenerator extends PascalitoParserBaseVisitor<String> {
 
     @Override
     public String visitCmdWhile(CmdWhileContext ctx) {
-        String lStart = novoLabel("while");
-        String lEnd   = novoLabel("endwhile");
+        String lStart = novoLabel();
+        String lEnd   = novoLabel();
         emit("LABEL", lStart);
         String tCond = visit(ctx.expr());
         emit("JUMPF", tCond, lEnd);
